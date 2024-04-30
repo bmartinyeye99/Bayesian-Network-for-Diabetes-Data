@@ -1,0 +1,1224 @@
+---
+title: "zadanie_2_Branny_Bopko"
+output: html_document
+date: "2024-04-13"
+---
+
+# Dataset o Diabete
+
+-   **Diabetes_binary**: máte diabetes? 0 = no diabetes 1 = pre-diabetes 2 = diabetes
+-   **HighBP**: Dospelí, ktorým lekár, sestra alebo iný zdravotnícky pracovník povedal, že majú vysoký krvný tlak (0,1)
+-   **HighChol**: Boli vám KEDYKOĽVEK povedané lekárom, sestrou alebo iným zdravotníckym pracovníkom, že máte vysoký cholesterol? (0,1)
+-   **CholCheck**: Kontrola cholesterolu v posledných piatich rokoch (0,1)
+-   **BMI**: Index telesnej hmotnosti (BMI)
+-   **Smoker**: Fajčili ste počas celého života aspoň 100 cigariet? [Poznámka: 5 balíčkov = 100 cigariet] (0,1)
+-   **Stroke**: (Bolo vám povedané) že ste mali mozgovú príhodu. (0,1)
+-   **HeartDiseaseorAttack**: Respondenti, ktorí kedy uviedli, že majú koronárnu srdcovú chorobu (CHD) alebo infarkt myokardu (MI) (0,1)
+-   **PhysActivity**: Dospelí, ktorí uviedli, že počas posledných 30 dní robili fyzickú aktivitu alebo cvičenie okrem svojej pravidelnej práce (0,1)
+-   **Fruits**: Konzumácia ovocia 1 alebo viackrát denne (0,1)
+-   **Veggies**: Konzumácia zeleniny 1 alebo viackrát denne (0,1)
+-   **HvyAlcoholConsump**: Veľkí konzumenti alkoholu (dospelí muži, ktorí konzumujú viac ako 14 nápojov týždenne a dospelé ženy, ktoré konzumujú viac ako 7 nápojov týždenne)(0,1)
+-   **AnyHealthcare**: Máte nejaké zdravotné poistenie vrátane zdravotného poistenia, predplatených plánov ako HMO, alebo vládnych plánov ako Medicare, alebo Indian Health Service? (0,1)
+-   **NoDocbcCost**: Bol v posledných 12 mesiacoch čas, keď ste potrebovali vidieť lekára, ale nemohli ste si to dovoliť kvôli nákladom? (0,1)
+-   **GenHlth**: Povedali by ste, že vo všeobecnosti je váš zdravotný stav: hodnotenie (1 \~ 5)
+-   **MentHlth**: Teraz, keď premýšľate o svojom duševnom zdraví, ktoré zahŕňa stres, depresiu a problémy s emóciami, koľko dní počas posledných 30 dní bolo vaše duševné zdravie nie dobré? (0 \~ 30)
+-   **PhysHlth**: Teraz, keď premýšľate o svojom fyzickom zdraví, ktoré zahŕňa fyzické choroby a zranenia, koľko dní počas posledných 30 dní bolo vaše fyzické zdravie nie dobré? (0 \~ 30)
+-   **DiffWalk**: Máte vážne ťažkosti s chôdzou alebo s vyliezaním schodov? (0,1)
+-   **Sex**: Uveďte pohlavie respondenta (0,1) (Žena alebo Muž)
+-   **Age**: Štrnásťstupňová veková kategória (1 \~ 14)
+-   **Education**: Aký je najvyšší stupeň alebo rok školy, ktorý ste dokončili? (1 \~ 6)
+-   **Income**: Je váš ročný domáci príjem zo všetkých zdrojov: (Ak respondent odmietne pri akejkoľvek úrovni príjmu, označte "Refused") (1 \~ 8)
+
+```{r}
+library(leaps)
+library(pROC)
+library(reshape2)
+library(tidyverse)
+library(magrittr) 
+library(data.table) 
+library(caret)
+library(ggplot2)
+library(e1071)
+library(readxl)
+library(cowplot)
+library(patchwork)
+library(polycor)
+library(psych)
+library(caret)
+library(caretEnsemble)
+library(glmnet)
+```
+
+Nastavenie cesty
+
+```{r}
+setwd("./") 
+list.files() 
+```
+
+## Načítanie datasetu
+
+```{r}
+data <- read.csv("diabetes_012_health_indicators_BRFSS2015.csv")
+names(data)
+head(data)
+```
+
+# Popis dát
+
+```{r}
+summary(data)
+cat("Colnum : ", ncol(data),"\n")
+cat("Rownum : ",nrow(data))
+```
+
+```{r}
+View(data)
+```
+
+## Unikátne hodnoty 
+
+```{r}
+number_of_uniq_data <- sapply(data, function(x) length(unique(x)))
+number_of_uniq_data
+```
+## Unikátne hodnoty diabetu
+0 = no diabetes 1 = pre-diabetes 2 = diabetes
+
+
+```{r}
+table(data$Diabetes_012, useNA = 'always')
+```
+Vidíme, že máme veľa binárnych hodnôt. Hodnoty, ktorými budeme pracovať pri vytáraní modelu budeme musieť enkódovať. Naša predikovaná hodnota Diabetes_012 disponuje 3 hodnotami. 0 - no diabetes 1 - prediabetes 2 - diabetes. 
+
+```{r}
+sapply(data, class)
+table(sapply(data, class))
+sum(is.na(data))
+
+```
+
+Okrem toho dataset obsahuje všetky pozorovania v numerických hodnotách a nemá chýbajúce hodnoty.
+
+```{r}
+cat("Number of rows: ", nrow(data),"\n")
+cat("Number of duplicates ")
+num_duplicates <- sum(duplicated(data))
+print(num_duplicates)
+
+# Remove duplicated rows
+data <- data[!duplicated(data), ]
+
+# Get the number of rows after deletion of duplicates
+cat("Number of rows: ", nrow(data),"\n")
+
+```
+
+Po odstránení duplikátov nám ostalo 229781 pozorovaní. 
+
+```{r}
+data <- data %>% 
+  mutate(
+    Diabetes = case_when(
+      Diabetes_012 %in% c(1, 2) ~ 1,
+      Diabetes_012 == 0 ~ 0
+    )
+  ) %>%
+  select(-Diabetes_012)
+```
+
+
+
+```{r}
+print("Diabetes values :")
+table(data$Diabetes, useNA = 'always')
+```
+
+Kedže dataset nám opisuje multi-class problém (máme 3 triedy v Diabetes_012), stav prediabetu a diabetu zakódujeme do hodnoty 1. 
+Náš model teda bude riešiť two-class problém pri klasifikácii. Stav 0 sme nechali 0. (No diabetes)
+
+```{r}
+
+numeric_columns <- sapply(data, is.numeric)  # Identify numeric columns
+non_binary_numeric_columns <- numeric_columns & !apply(data, 2, function(x) all(x %in% c(0, 1)))
+nonbinarycolumns <- names(non_binary_numeric_columns[non_binary_numeric_columns])
+
+print_histograms <- function(data, columns) {
+  for (col_name in columns) {
+    
+    if (col_name == "BMI"){
+      p <- ggplot(data, aes(x = BMI)) + 
+      geom_histogram(fill = "skyblue", color = "black") +
+      ggtitle("Distribution of BMI") + 
+      xlab("BMI") + 
+      ylab("Count")
+        print(p)
+    }
+    else{
+    data[[col_name]] <- factor(data[[col_name]])
+    p <- ggplot(data, aes_string(x = col_name)) +
+      geom_bar(fill = "skyblue", color = "black") +
+      scale_x_discrete(drop = FALSE) +  # Ensure all unique values are shown on x-axis
+      theme_minimal() +
+      ggtitle(paste("Distribution of", col_name)) +
+      xlab(col_name) +
+      ylab("Count")
+    print(p)
+    }
+  }
+}
+
+print_histograms(data, nonbinarycolumns)
+
+```
+
+Čo sa týka viachodnotových stĺpcov v datasete, vidíme že normálne distribuovaným hodnotám sa približujú hodnoty v Age. Hodnota BMI sa takito približuje k normálnemu distribuovaniu no vidíme tu pravé zošikmenie hodnôt ( right skew/positive skew ) 
+
+```{r}
+
+# Define the columns of interest
+columns_of_interest <- c('BMI', 'GenHlth', 'MentHlth', 'PhysHlth', 'Age', 'Education', 'Income')
+
+# Create a list to store individual boxplot plots
+plots <- list()
+
+# Loop through each column and create a boxplot
+for (i in 1:length(columns_of_interest)) {
+  col <- columns_of_interest[i]
+  p <- ggplot(data, aes_string(x = col)) +
+    geom_boxplot(fill = "skyblue", color = "black") +
+    ggtitle(paste("Distribution of", col)) +
+    theme_minimal(base_size = 8) +  # Set base font size
+    theme(axis.text.x = element_text(size = 6),  # Set x-axis text size
+          axis.text.y = element_text(size = 6)) +  # Set y-axis text size
+    xlab(col) +
+    ylab("Value")
+  plots <- c(plots, list(p))  # Append each plot to the list
+}
+
+# Combine plots into a single plot grid
+combined_plot <- cowplot::plot_grid(plotlist = plots, nrow = 4, ncol = 2)
+
+# Adjust the size of the combined plot
+ggsave("combined_plot.png", combined_plot, width = 10, height = 10)
+
+# Print the combined plot
+print(combined_plot)
+
+```
+
+Boxploty takisto potvrdzujú, že najbližšie k normálnej distribúcii je stĺpec Age. 
+
+```{r}
+handle_outliers <- function(data, columns, sensitivity) {
+  na_counts <- setNames(numeric(length(columns)), columns)  # Initialize a vector to hold NA counts for each column
+  totalNumOfOutliers = 0
+  for (col in columns) {
+    # Count NAs before handling outliers
+    na_count_before <- sum(is.na(data[[col]]))
+    
+    # Calculate quartiles and IQR
+    q1 <- quantile(data[[col]], 0.25, na.rm = TRUE)
+    q3 <- quantile(data[[col]], 0.75, na.rm = TRUE)
+    iqr <- q3 - q1
+    
+    # Define upper and lower bounds for outliers
+    upper_bound <- q3 + iqr*sensitivity
+    lower_bound <- q1 - iqr*sensitivity
+    
+    print(paste("Upper bound for", col, ":", upper_bound))
+    print(paste("Lower bound for", col, ":", lower_bound))
+    # Replace outliers with NA
+    data[[col]] <- ifelse(data[[col]] < lower_bound | data[[col]] > upper_bound, NA, data[[col]])
+    
+    # Count NAs after handling outliers
+    na_count_after <- sum(is.na(data[[col]]))
+    
+    # Calculate the number of NAs added
+    na_counts[col] <- na_count_after - na_count_before
+    totalNumOfOutliers = totalNumOfOutliers + na_counts
+    # Print the number of NAs added for the current column
+    cat("NAs added in", col, ":", na_counts[col], "\n")
+  }
+      data <- na.omit(data)
+  cat("Total number of outliers detected : ", totalNumOfOutliers)
+  # Return the cleaned data and the NA counts
+  return(data)
+}
+```
+
+```{r}
+# Function returns names of non binary columns
+non_binary_columns <- function(data) {
+  non_binary_cols <- character(0)  # Initialize an empty vector to store non-binary column names
+  for (col in names(data)) {
+    unique_vals <- unique(data[[col]])
+    if (length(unique_vals) > 2) {
+      non_binary_cols <- c(non_binary_cols, col)  # Add column name to the list of non-binary columns
+    }
+  }
+  return(non_binary_cols)
+}
+
+# Usage:
+nonbinarycolumns <- non_binary_columns(data)
+nonbinarycolumns <- non_binary_columns(data)
+cat("Non binary columns : ",nonbinarycolumns)
+
+#data_With_Outliers <- data
+#data <- handle_outliers(data, nonbinarycolumns, 0.8)
+#head(data)
+```
+
+Nebudeme v našom prípade odstranovať outliers lebo tie nesú dôležitú informáciu pre ako BMI tak aj samotný diabetes.
+
+```{r}
+library(ggplot2)
+library(reshape2)
+
+# Function to generate heatmap for correlation matrix
+generate_correlation_heatmap <- function(correlation_matrix, title) {
+  numsize = 1.9
+  if ( title == "Correlation of Features - Non-Binary Columns")
+    numsize = 2.5
+  else
+    numsize = 1.9
+  # Convert correlation matrix to dataframe
+  correlation_df <- as.data.frame(correlation_matrix)
+  correlation_df$row <- rownames(correlation_matrix)
+
+  # Melt dataframe to long format
+  correlation_df_long <- melt(correlation_df, id.vars = "row")
+
+  # Set the size of the plot
+  options(repr.plot.width = 10, repr.plot.height = 8)
+
+  # Plot heatmap
+  ggplot(data = correlation_df_long, aes(x = row, y = variable, fill = value)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = round(value, 2)), color = "black", size = numsize) +
+    scale_fill_gradient2(low = "blue", high = "red", na.value = "white", limits = c(-1, 1), name = "Correlation") +
+    theme_minimal() +
+    labs(title = title) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+}
+
+# Compute correlation matrix for the entire dataset
+correlation_matrix <- cor(data)
+
+# Compute correlation matrix for non-binary columns
+correlation_matrix_nonbinary <- cor(data[, nonbinarycolumns])
+
+# Generate heatmap for non-binary columns
+generate_correlation_heatmap(correlation_matrix_nonbinary, "Correlation of Features - Non-Binary Columns")
+
+```
+
+Na grafe je vidno, že viacere hodnoty sa korelujú. Dokonca máme aj negatívne korlácie. Z tychto hodnot nedozvieme vsetko, ale napr. mozeme mat predpoklad, ze cim vzdelanejši je clovek, tym viac zaraba, alebo cim viac zaraba clovek, tym ma vacsie vzdelanie.
+
+Klucove info z tejto tabulky su napr:, age, GenHlth, BMI, MentlHlth, PhysHlth
+
+Vypocitame korelácie medzi kategorickými hodnotami, ktoré rozdelujeme na nominalne a ordinalne.
+
+```{r}
+ordinal_categorical_columns <- c("Education", "Income", "GenHlth")
+
+binary_cols <- c('HighBP', 'HighChol', 'CholCheck', 'Smoker',
+          'Stroke', 'HeartDiseaseorAttack', 'PhysActivity', 'Veggies',
+          'HvyAlcoholConsump', 'AnyHealthcare', 'NoDocbcCost', 'DiffWalk', 'Diabetes')
+
+all_categorical_values <-c('HighBP', 'HighChol', 'CholCheck', 'Smoker',
+          'Stroke', 'HeartDiseaseorAttack', 'PhysActivity', 'Veggies',
+          'HvyAlcoholConsump', 'AnyHealthcare', 'NoDocbcCost', 'DiffWalk', 'Diabetes', "Education", "Income", "GenHlth", "Age", "Sex", "PhysHlth", "MentHlth", "Fruits")
+
+binary_data <- data[, binary_cols]
+ordinal_data <- data[, ordinal_categorical_columns]
+
+# Calculate Tetrachoric correlation for binary columns
+tetrachoric_corr <- tetrachoric(binary_data)
+
+# Print the results
+print("Tetrachoric Correlation for Binary Columns:")
+print(tetrachoric_corr)
+
+```
+
+Vypocitali sme korelacie medzi nominalnymi kategorickými hodnotami. Tieto výsledky nám pomozu vytvorit model, kedze vidíme vztahy medzi hodnotou Diabetes co chceme predikovat, a ostatnými hodnotami. Napr. HighBP a Diabetes maju mierne velku korelcáie, preto si predpokladáme, že vyssi krvný tlak a srdcové ochorenia znamenaju vacsiu sancu na diabetes.
+
+Na druhej strane, fyzická aktivita, konzumovanie zelenín a absolvovanie preventívnych návštev lekára - čiže keď sa nenastala taká situácia, že doktor nebol navštevovaný, ked by mal byt - NoDocbcCost, znižujú šancu Diabetes. Prekvapivo aj konzumácia alkoholu.
+
+Klucove info: HighBP, HighChl, Chlch, HrtDa,, HvyAc, Stroke, AnyHL
+
+```{r}
+polychoric_corr <- polychoric(ordinal_data)
+
+print("###########")
+
+print("Polychoric Correlation for Ordinal Columns:")
+print(polychoric_corr)
+```
+
+```{r}
+print(nonbinarycolumns)
+plots <- list()
+
+all_categorical_values_without_diabetes <-c('HighBP', 'HighChol', 'CholCheck', 'Smoker',
+          'Stroke', 'HeartDiseaseorAttack', 'PhysActivity', 'Veggies',
+          'HvyAlcoholConsump', 'AnyHealthcare', 'NoDocbcCost', 'DiffWalk', "Education", "Income", "GenHlth")
+# Create stacked barplots for categorical values and Diabetes
+for (col in all_categorical_values_without_diabetes) {
+  
+  # Create bar plot
+  plot <- data %>%
+    mutate(Diabetes = factor(Diabetes)) %>% # Convert Diabetes to factor
+    group_by(Diabetes, !!sym(col)) %>%
+    summarise(Count = n()) %>%
+    ggplot(aes(fill = Diabetes, y = Count, x = !!sym(col))) + 
+    geom_bar(position = 'stack', stat = 'identity') +
+    theme_minimal() + 
+    labs(x = col, y = "Count", title = paste("Distribution of Diabetes in ", col)) +
+    theme(plot.title = element_text(hjust = 0.5, size = 12, face = 'bold')) +
+    scale_fill_manual('Diabetes', values = c('lightblue', 'coral'))
+  
+  
+   # Store the plot
+   plots[[col]] <- plot
+ }
+
+ # Print the plots
+ for (i in seq_along(plots)) {
+  #print(plots[[i]])
+ }
+```
+
+Na tychto grafoch vidíme ditribúciu Diabetes medzi ostatnými binárnými hodnotami. Očividne sú viac diabetikov medzi jednotlivcami, ktorí maju vysoky cholesterol, krvný tlak, alebo medzi tými ktorí uz mali stroke
+
+```{r}
+
+diabetes_percentage <- data %>%
+  group_by(Diabetes) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = prop.table(Count) * 100)
+
+# Create pie chart
+piechart <- ggplot(diabetes_percentage, aes(x = "", y = Percentage, fill = factor(Diabetes))) +
+  geom_bar(stat = "identity", width = 1) +
+  geom_text(aes(label = paste(round(Percentage, 1), "%")), position = position_stack(vjust = 0.5)) +  # Add percentage labels
+  coord_polar(theta = "y") +
+  labs(fill = "Diabetes", title = "Percentage Distribution of Diabetes") +
+  theme_void() +
+  theme(legend.position = "bottom")  # Move legend to the bottom
+
+# Print pie chart
+print(piechart)
+```
+
+Okrem korelácie, pouzivame regsubsets aby sme nasli najlepsie predictory pre BMI
+
+```{r}
+# # Perform best subset regression
+# Best_Subset <- regsubsets(BMI ~ .,
+#                           data = data,
+#                           nbest = 1,      # 1 best model for each number of predictors
+#                           nvmax = NULL,   # NULL for no limit on number of variables
+#                           force.in = NULL, force.out = NULL,
+#                           method = "exhaustive")
+# 
+# # Summarize the results
+# summary_best_subset <- summary(Best_Subset)
+# 
+# # View the summary output
+# summary_best_subset
+# which.max(summary_best_subset$adjr2)
+# summary_best_subset$which[21,]
+```
+
+<!-- Hviezdičky ( * ) v dolnej časti výstupu označujú, ktoré predikčné premenné patria do najlepšieho regresného modelu pre každý možný model s rôznym počtom predikčných premenných. -->
+
+<!-- Pre model s jednou prediktorovou premennou je najlepším regresným modelom model, v ktorom sa ako prediktorová premenná použije HighBP -->
+
+<!-- V prípade modelu s dvoma prediktorovými premennými sa najlepší regresný model vytvorí použitím Diabetes a HighBP ako prediktorových premenných. -->
+
+# Linear regression model
+
+```{r}
+model <- data %$% 
+  lm(BMI ~ Age + GenHlth + HighBP + Diabetes + Sex )
+
+summary(model)
+```
+
+Celkovo model naznačuje, že Age, General Health, High Blood Pressure, Diabetes, and Sex sú významnými prediktormi BMI. Model však vysvetľuje len malú časť rozptylu BMI (adjusted R-squared = 0.07293), čo naznačuje, že BMI môžu ovplyvňovať aj iné faktory, ktoré nie sú zahrnuté v modeli.
+
+Intercept: Priemerná hodnota BMI, keď sú všetky ostatné premenné nulové, je 26.70. Tento koeficient je štatisticky významný (p \< 0.05).
+
+-   Age: Za každú jednotku zvýšenia veku (Age) sa BMI zníži o -0.19, čo je štatisticky významné (p \< 0.05). Aj keď vplyv malý, je považovaný za štatisticky signifikantný.
+
+Ak má osoba vysoký krvný tlak (HighBP = 1), očakáva sa, že jej BMI bude v priemere vyšší približne o 1,337023 jednotky v porovnaní s osobou bez vysokého krvného tlaku (HighBP = 0), pričom sa kontrolujú ostatné premenné v modeli.
+
+
+```{r}
+ggplotRegression <- function(fit) {
+  require(ggplot2)
+  
+  predictors <- names(fit$model)[-1]  # Exclude the response variable
+  
+  plots <- list()
+  
+  for (predictor in predictors) {
+    plot <- ggplot(fit$model, aes_string(x = predictor, y = names(fit$model)[1])) + 
+      geom_point() +
+      stat_smooth(method = "lm", col = "red") +
+      labs(title = paste("Adj R2 =", signif(summary(fit)$adj.r.squared, 5),
+                         "Intercept =", signif(coef(fit)[1], 5),
+                         "Slope =", signif(coef(fit)[predictor], 5),
+                         "P =", signif(summary(fit)$coef[which(rownames(summary(fit)$coef) == predictor), "Pr(>|t|)"], 5)))
+    
+    plots[[predictor]] <- plot
+  }
+  
+  return(plots)
+}
+
+plots <- ggplotRegression(model)
+
+for (predictor in names(plots)) {
+  print(plots[[predictor]])
+}
+
+```
+## Logistická regresia
+
+
+Budeme klasifikovať s týmto modelom, to či človek nemá diabetes/prediabetes, alebo či sa nachádzav diabetes štádiu. Pôjde teda o binárnu klasifikáciu.
+
+```{r}
+# Generate heatmap for entire dataset
+generate_correlation_heatmap(correlation_matrix, "Correlation of Features - Entire Dataset")
+```
+Na základe korelačnej heatmapy vidíme, použijeme predikáty ako HighBP, BMI, GenHlth( ten má silnú koreláciu s DiffWalk a teda toto nepoužijeme kedže vyzerá ze sú vzájomne závislé) a Age. 
+
+
+```{r}
+plot_logistic_regression <- function(data, predictors) {
+  for (predictor in predictors) {
+    # Plot
+    p <- data %>%
+      ggplot(aes_string(x = predictor, y = "Diabetes")) +
+      geom_point(position = position_jitter(width = 0.3, height = 0.06), 
+                 alpha = 0.05, 
+                 shape = 1, 
+                 size = 1.5) + 
+      stat_smooth(method = "glm", method.args = list(family = "binomial"), 
+                  aes(color = predictor)) +
+      ggtitle(paste("Diabetes vs", predictor), 
+              subtitle = "Visualization of logistic regression fit") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    
+    print(p)
+  }
+}
+
+
+
+predictors <- c("HighBP", "PhysActivity", 
+                "DiffWalk", "GenHlth", "BMI", "HighBP", 
+                "HighChol", "HeartDiseaseorAttack", "Age", "Income")
+
+
+
+#plot_logistic_regression(data, predictors)
+```
+
+```{r}
+model <- glm(Diabetes ~ HighBP + BMI + GenHlth + PhysHlth + Age + Income,
+  data = data,
+  family = binomial)
+summary(model)
+```
+
+Zadefinujeme si naše H0
+
+1.H0: Nie je pravda, že človek s diagnostikovaným vysokým krvným tlakom má šancu na diabetes alebo prediabetes.
+
+2.H0: Človek s problémom s chodením nemá diabetes alebo prediabetes.
+
+3.H0: Človek ktorý uviedol, že sa má dobre nemá nemá diabetes alebo prediabetes.
+
+4.H0: BMI nemá vplyv na diabets alebo prediabetes stav.
+
+5.H0: So zvýšeným vekom nestúpa šanca na prediabetes alebo diabetes.
+
+
+Všetky h0 zamietnuté.
+
+
+```{r}
+real.classes <- model$y
+head(model$y, n=10)
+
+predicted.class.probabilities <- model$fitted.values
+predicted.classes <- if_else(predicted.class.probabilities >=0.5, 1, 0) 
+
+prediction_vs_real <- data.frame(
+  Real.Classes = real.classes,
+  Predicted.Class.Probabilities = predicted.class.probabilities,
+  Predicted.Classes = predicted.classes
+)
+```
+
+
+```{r}
+library(caret)
+caret::confusionMatrix(as_factor(predicted.classes), as_factor(real.classes), positive = "1")
+```
+```{r}
+
+TP <- sum(prediction_vs_real$Real.Classes == 1 & prediction_vs_real$Predicted.Classes == 1)
+TN <- sum(prediction_vs_real$Real.Classes == 0 & prediction_vs_real$Predicted.Classes == 0)
+FP <- sum(prediction_vs_real$Real.Classes == 0 & prediction_vs_real$Predicted.Classes == 1)
+FN <- sum(prediction_vs_real$Real.Classes == 1 & prediction_vs_real$Predicted.Classes == 0)
+
+cat("True Positives (TP):", TP, "\n")
+cat("True Negatives (TN):", TN, "\n")
+cat("False Positives (FP):", FP, "\n")
+cat("False Negatives (FN):", FN, "\n")
+
+accuracy <- (TP + TN)/(TP+TN+FN+FP)
+precision <- TP / (TP + FP)
+recall <- TP / (TP + FN)
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+paste("Accuracy score is ", accuracy)
+paste("Precision score is ", precision)
+paste("Recall score is ", recall)
+paste("F1 score is ", f1_score)
+```
+Model performance pri 0.5 cutoffe je nič moc, podme nájsť optimálny cutoff.
+
+### ROC CURVE
+
+```{r}
+
+roc_obj <- roc(response = real.classes, 
+               predictor = predicted.class.probabilities,
+               levels = c(0, 1))
+```
+```{r}
+plot(roc_obj, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+```
+
+```{r}
+coords <- coords(roc_obj, "best", best.method = "youden")
+optimal_cutoff <- coords$threshold
+optimal_sensitivity <- coords$sensitivity
+optimal_specificity <- coords$specificity
+```
+
+```{r}
+plot(roc_obj)
+points(coords$specificity, coords$sensitivity, pch = 19, col = 'red', cex = 0.7)
+legend("bottomright", pch = 19, col = 'red', legend = paste("Optimal cutoff:", round(optimal_cutoff, 4)))
+optimal_cutoff
+
+```
+```{r}
+real.classes <- model$y
+head(model$y, n=10)
+
+predicted.class.probabilities <- model$fitted.values
+predicted.classes <- ifelse(predicted.class.probabilities >=0.1563, 1, 0) 
+
+caret::confusionMatrix(as_factor(predicted.classes), as_factor(real.classes), positive = "1")
+```
+Model je teda schopnejší správne predikovať s týmto cutoffom aj minoritnú triedu (1 - mám diabetes), vďaka nevybalancovaným triedam ale vidíme, že by sme pre hypochondrov radšej zvolili model s cutoffom 0.5, aby sme im s vačšiou pravdepodobnosťou mohli zaručiť, že nemajú diabetes. Ak by ale bolo podstatné určiť a dôležitejšie určit TRUE POSITIVES, teda správne identifikovať diabetikov, zvolený cutoff je najlepší možný.
+
+
+
+## Support vector machine
+
+
+Kedže SVM nie dobre zvláda nevybalancovanú predikovanú triedu:
+
+```{r}
+minority_size <- table(data$Diabetes)[2]
+```
+
+Prevedieme downsample na majoritnú skupinu, aby sme mali vyvážený dataset.
+
+```{r}
+data_minority <- data[data$Diabetes == 1, ] # Minoritná trieda
+data_majority <- data[data$Diabetes == 0, ]
+data_majority_sampled <- data_majority[sample(nrow(data_majority), minority_size), ]
+
+# Zlúčenie dát späť do vyváženého datasetu
+data_balanced <- rbind(data_minority, data_majority_sampled)
+head(data_balanced)
+
+
+```
+
+
+```{r}
+diabetes_percentage <- data_balanced %>%
+  group_by(Diabetes) %>%
+  summarise(Count = n()) %>%
+  mutate(Percentage = prop.table(Count) * 100)
+
+# Create pie chart
+piechart <- ggplot(diabetes_percentage, aes(x = "", y = Percentage, fill = factor(Diabetes))) +
+  geom_bar(stat = "identity", width = 1) +
+  geom_text(aes(label = paste(round(Percentage, 1), "%")), position = position_stack(vjust = 0.5)) +  # Add percentage labels
+  coord_polar(theta = "y") +
+  labs(fill = "Diabetes", title = "Percentage Distribution of Diabetes") +
+  theme_void() +
+  theme(legend.position = "bottom")  # Move legend to the bottom
+
+# Print pie chart
+print(piechart)
+```
+
+Vidme vyvážený dataset.
+
+```{r}
+correlation_matrix <- cor(data_balanced)
+correlations_with_diabetes <- abs(correlation_matrix["Diabetes", ])
+correlations_with_diabetes <- correlations_with_diabetes[-which(names(correlations_with_diabetes) == "Diabetes")]
+correlations_with_diabetes
+
+```
+
+Zvolenie features, na zvolenie features sme využili RF, zobrazíme si teda najlepšie prediktory. 
+
+```{r}
+library(dplyr)
+library(randomForest)
+
+Diabetes_vs_predictors <- randomForest(as.factor(Diabetes)~ ., data = data_balanced, ntree = 500)
+
+varImpPlot(Diabetes_vs_predictors)
+
+```
+
+
+
+
+```{r}
+hyperparameter_threshold <- 3000
+final_model_threshold <- 2000
+importance_values <- importance(Diabetes_vs_predictors)
+importance_df <- as.data.frame(importance_values)
+importance_df$Feature <- rownames(importance_df)
+print(importance_df)
+
+features_for_tuning <- subset(importance_df, MeanDecreaseGini > hyperparameter_threshold)$Feature
+features_for_final_model <- subset(importance_df, MeanDecreaseGini > final_model_threshold)$Feature
+
+# Define formulas
+formula_for_tuning <- as.formula(paste("Diabetes ~", paste(features_for_tuning, collapse = " + ")))
+formula_for_final_model <- as.formula(paste("Diabetes ~", paste(features_for_final_model, collapse = " + ")))
+```
+
+
+
+
+Dáta si rozdelíme na train test pomocou train/test splitu 80:20
+
+```{r}
+set.seed(123)
+
+data_balanced$Diabetes <- factor(data_balanced$Diabetes)
+
+partition <- createDataPartition(data_balanced$Diabetes, p=0.8, list=FALSE)
+
+training_data <- data_balanced[partition, ]
+testing_data <- data_balanced[-partition, ]
+
+cat("Trénovacia sada:\n")
+print(dim(training_data))
+cat("Distribúcia cieľovej premennej (Diabetes) v trénovacej sade:\n")
+print(table(training_data$Diabetes))
+
+cat("\nTestovacia sada:\n")
+print(dim(testing_data))
+cat("Distribúcia cieľovej premennej (Diabetes) v testovacej sade:\n")
+print(table(testing_data$Diabetes))
+
+```
+
+Výber podmnožiny na tuning hyperparametrov, vďaka nedostupnej výpočtovej sile sme sa rozhodli že vykonáme tuning hyperparametrov tak, že vyberieme náhodnú vzorku o veľkosti 10% z testovacej množiny, rozdelíme túto vzorku 80:20 na  tuning_training a tuning_validation, pričom modely budeme trénovať na tuning_training a validovať na tuning_validation. Následne vyberieme najlepšie parametre a natrénujeme náš model na training_data. 
+
+```{r}
+
+set.seed(123)
+
+unique(training_data$Diabetes)
+str(training_data$Diabetes)
+
+
+sample_indexes <- createDataPartition(training_data$Diabetes, p=0.1, list=FALSE) #10% z trénovacej
+tuning_subset  <- training_data[sample_indexes, ]
+
+cat("\n10% z train sady ktoré následne rozdeílme 80:20:\n")
+print(dim(tuning_subset))
+cat("Distribúcia cieľovej premennej (Diabetes) v tuningovej subset sade:\n")
+print(table(tuning_subset$Diabetes))
+
+tuning_train_indexes <- createDataPartition(training_data$Diabetes, p=0.8, list=FALSE) # 80:20 split z 10% trénovacej
+tuning_training <- tuning_subset[tuning_train_indexes, ]
+tuning_validation <- tuning_subset[-tuning_train_indexes, ]
+
+cat("\nTuningová sada train:\n")
+print(dim(tuning_training))
+cat("Distribúcia cieľovej premennej (Diabetes) v tuningovej trénovacej sade:\n")
+print(table(tuning_training$Diabetes))
+
+cat("\nTuningová sada validate:\n")
+print(dim(tuning_validation))
+cat("Distribúcia cieľovej premennej (Diabetes) v tuningovej validačnej sade:\n")
+print(table(tuning_validation$Diabetes))
+
+```
+Formula je zvolená z nezávislých premenných, ktoré mali najvačšiu koreláciu s Diabetes.
+
+```{r}
+cat("Formula for Hyperparameter Tuning:\n")
+formula_for_tuning
+cat("Formula for Final Model:\n")
+formula_for_final_model
+```
+
+
+### Tréning modelu pre získanie optímálneho kernelu, C, prípadne gammy pri radial/sigmoid alebo degree pri polynomiálnom kernely.
+
+- Pri gamma nízke hodnoty znamenajú, že vzdialené príklady majú veľký vplyv, zatiaľ čo vysoké hodnoty znamenajú, že iba príklady blízko rozhodovacej hranice majú veľký vplyv. V podstate to kontroluje, ako daleko sa významnosť jednotlivých príkladov šíri.
+
+- Parameter cost v metóde SVM je penalizačný parameter za nesprávne klasifikácie. Vyššie hodnoty costu posilňujú prísnejšiu klasifikačnú hranicu, čo vedie k menšiemu počtu chybných klasifikácií na úkor väčšej komplexity modelu. 
+
+- Parameter degree v metóde SVM s polynomiálnym kernelom určuje stupeň polynómu, ktorý sa použije na vytvorenie klasifikačnej hranice. Vyššie hodnoty stupňa polynómu zvyčajne vedú k zložitejším klasifikačným hraniciam, čo môže byť užitočné pri modelovaní komplexných dátových vzťahov. Naopak, nižšie hodnoty stupňa polynómu vedú k jednoduchším klasifikačným hraniciam, čo môže byť užitočné pri jednoduchších dátových vzorcoch a minimalizácii pretrénovania.
+
+```{r}
+
+tune_and_evaluate <- function(kernel_type, cost_range, gamma_range = NULL, degree_range = NULL) {
+  
+  # Expand grid of hyperparameters based on kernel type
+  if (!is.null(gamma_range) && !is.null(degree_range)) {
+    hyperparameters <- expand.grid(kernel = kernel_type, cost = cost_range, gamma = gamma_range, degree = degree_range)
+  } else if (!is.null(gamma_range)) {
+    hyperparameters <- expand.grid(kernel = kernel_type, cost = cost_range, gamma = gamma_range)
+  } else if (!is.null(degree_range)) {
+    hyperparameters <- expand.grid(kernel = kernel_type, cost = cost_range, degree = degree_range)
+  } else {
+    hyperparameters <- expand.grid(kernel = kernel_type, cost = cost_range)
+  }
+  
+  
+  #print(paste("Kernel Type:", kernel_type))
+  #print("Hyperparameters Grid:")
+  #print(hyperparameters)
+  
+  # Tuning modela k-fold 10
+  set.seed(123)
+  tc <- tune.control(sampling = "fix", cross = 10)
+  tune_result <- tune(svm, formula_for_tuning, data = tuning_training, ranges = hyperparameters, tunecontrol = tc)
+
+  print("Best Model:")
+  print(tune_result$best.parameters)
+  # Train model s najlepšími parametrami
+  if(tune_result$best.parameters$kernel == "linear"){
+    best_model <- svm(formula, data = tuning_training,
+                     kernel = tune_result$best.parameters$kernel, 
+                     cost = tune_result$best.parameters$cost,
+                     probability = TRUE)
+    
+  }else if(tune_result$best.parameters$kernel == "radial"){
+    best_model <- svm(formula, data = tuning_training,
+                     kernel = tune_result$best.parameters$kernel,
+                     cost = tune_result$best.parameters$cost,
+                     gamma = tune_result$best.parameters$gamma,
+                     probability = TRUE)
+  }else if(tune_result$best.parameters$kernel == "polynomial"){
+    best_model <- svm(formula, data = tuning_training,
+                     kernel = tune_result$best.parameters$kernel,
+                     cost = tune_result$best.parameters$cost,
+                     degree = tune_result$best.parameters$degree,
+                     probability = TRUE)
+  }else{
+    best_model <- svm(formula, data = tuning_training,
+                     kernel = tune_result$best.parameters$kernel,
+                     cost = tune_result$best.parameters$cost,
+                     gamma = tune_result$best.parameters$gamma,
+                     probability = TRUE)
+  }
+  
+  # Predict na validačnom malom datasete
+  predictions <- predict(best_model, newdata = tuning_validation, probability = TRUE)
+  probabilities <- attr(predictions, "probabilities")[,2]
+
+  # Vypočet roc auc
+  roc_result <- roc(tuning_validation$Diabetes, probabilities)
+  return(roc_result$auc)
+}
+
+cost_range <- 10^(seq(-1, 1, length = 3))
+
+
+auc_linear <- tune_and_evaluate("linear", cost_range)
+auc_radial <- tune_and_evaluate("radial", cost_range, gamma_range = 10^(seq(-3, -1, length = 3)))
+auc_polynomial <- tune_and_evaluate("polynomial", cost_range, degree_range = c(2, 3, 4))
+auc_sigmoid <- tune_and_evaluate("sigmoid", cost_range, gamma_range = 10^(seq(-3, -1, length = 3)))
+
+
+
+```
+
+
+
+```{r}
+cat("ROC AUC pre Linear Kernel:", auc_linear, "\n")
+cat("ROC AUC pre Radial Kernel:", auc_radial, "\n")
+cat("ROC AUC pre Polynomial Kernel:", auc_polynomial, "\n")
+cat("ROC AUC pre Sigmoid Kernel:", auc_sigmoid, "\n")
+```
+
+ROC AUC for Linear Kernel: 0.7962357 
+ROC AUC for Radial Kernel: 0.7924125 
+ROC AUC for Polynomial Kernel: 0.7871812 
+ROC AUC for Sigmoid Kernel: 0.7958438 
+
+Vidíme, že najlepšie hodnotenie ROC Area Under Curve má Lineárny kernel, čo je zaujímavé. Jeho parametre, ako môžeme vidieť vyššie boli cost 0.1, AUC hodnoty su ale podobné pri všetkých Kerneloch. Použijeme teda tieto parametre na tréning finálneho modelu. Pri nom budeme postupne uberať prediktory.
+
+Nakoniec z dôvodu obavy o pretrénovanie modelu (použitie viacerych prediktorov), sme sa rozhodli použit tie, ktoré sme použili pri hyperparameter tuningu. RF nám jednoznačne povedal, že najdôležitejšie sú BMI + GenHlth + Age. Na finálny model nebudeme používať kfold cv, kedže sme to už v priebehu tvorby finálneho modelu použili. 
+
+### Finálny model
+
+
+```{r}
+set.seed(123)
+
+final_model_svm <- svm(formula_for_tuning, data = training_data,
+                   kernel = "linear",
+                   cost = 0.1,
+                   probability = TRUE)
+summary(final_model_svm)
+
+```
+
+### Vyhodnotenie finálneho modelu
+
+```{r}
+predictions <- predict(final_model_svm, newdata = testing_data, probability = TRUE)
+probabilities <- attr(predictions, "probabilities")[,1]
+head(probabilities)
+roc_result <- roc(testing_data$Diabetes, probabilities)
+plot(roc_result, main = "ROC Curve SVM-final")
+print(roc_result$auc)
+abline(a = 0, b = 1, lty = 2, col = "gray")
+```
+
+
+Optimálny cutoff cez youden, specificity + sens - 1, maximalizácia specificity a sensitivity. Ak je výsledok 1, máme optimálny výsledok. Hľadáme teda na krivke taký priesečník, ktorý nám tento súčet maximalizuje. 
+
+```{r}
+coords <- coords(roc_result, "best", best.method = "youden")
+optimal_cutoff <- coords$threshold
+optimal_sensitivity <- coords$sensitivity
+optimal_specificity <- coords$specificity
+print(optimal_sensitivity)
+print(optimal_specificity)
+plot(roc_result)
+points(coords$specificity, coords$sensitivity, pch = 19, col = 'red', cex = 0.7)
+legend("bottomright", pch = 19, col = 'red', legend = paste("Optimal cutoff:", round(optimal_cutoff, 4)))
+optimal_cutoff
+```
+
+
+
+
+```{r}
+#print(probabilities)
+predicted_classes <- ifelse(probabilities >optimal_cutoff, 1, 0)
+
+# Skutočné triedy
+actual_classes <- testing_data$Diabetes
+
+# Vytvorenie konfúznej matice
+caret::confusionMatrix(as_factor(predicted_classes), as_factor(actual_classes), positive = "1")
+
+```
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    0    1
+         0 5123 1776
+         1 2822 6169
+                                          
+               Accuracy : 0.7106          
+                 95% CI : (0.7035, 0.7177)
+    No Information Rate : 0.5             
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.4213          
+                                          
+ Mcnemar's Test P-Value : < 2.2e-16       
+                                          
+            Sensitivity : 0.7765          
+            Specificity : 0.6448          
+         Pos Pred Value : 0.6861          
+         Neg Pred Value : 0.7426          
+             Prevalence : 0.5000          
+         Detection Rate : 0.3882          
+   Detection Prevalence : 0.5658          
+      Balanced Accuracy : 0.7106          
+                                          
+       'Positive' Class : 1     
+
+Vidíme, že dosahujeme mierne nadpriemerné výsledky.... Pozitívne je, ze dosahujeme vyššie hodnoty sensitivity , teda sa nám viac darí správne určovať diabetikov, čo môže byt v kontexte domény datasetu dôležité. Pre hypochodnerov nemáme dobré správy. Pri danej specificity sa nám môže stať, že ho mylne označíme ako diabetika aj keď je zdravý. Rozhodne to je ale lepšie ako pri Linearnej regresii aj ked tu porovnanie nieje relevantné, lebo sme pracovali s nevybalancovaným datasetom tam. Tu máme vďaka prevelance 0.5 dôkaz, že je vybalancovaný. 
+
+
+
+## Naive bayes
+
+
+Budeme rovnako pracovať s našim balancovaným datasetom, hyperparameter tuning sme si už vyskúšali. Tu použijeme ale inú formulu, a to formulu nezávislých premenných ktoré náš random forest označil, že majú efekt na Diabetes 
+
+```{r}
+set.seed(123)
+
+partition <- createDataPartition(data_balanced$Diabetes, p=0.9, list=FALSE)
+
+training_data_nb <- data_balanced[partition, ]
+testing_data_nb <- data_balanced[-partition, ]
+
+nb_model <- naiveBayes(formula_for_final_model, data = training_data_nb)
+
+summary(nb_model)
+```
+
+```{r}
+set.seed(123)
+probabilities_nb <- predict(nb_model, newdata = testing_data_nb, type = "raw")
+
+str(probabilities_nb)
+```
+```{r}
+roc_curve <- roc(testing_data_nb$Diabetes, probabilities_nb[, "1"])
+roc_curve$auc
+plot(roc_curve, main = "ROC Curve for Naive Bayes Classifier", col = "blue")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+```
+```{r}
+coords <- coords(roc_curve, "best", best.method = "youden")
+optimal_cutoff_nb <- coords$threshold
+print(coords)
+plot(roc_curve)
+points(coords$specificity, coords$sensitivity, pch = 19, col = 'yellow', cex = 0.7)
+legend("bottomright", pch = 19, col = 'yellow', legend = paste("Optimal cutoff:", round(optimal_cutoff_nb, 4)))
+```
+```{r}
+predicted_classes <- ifelse(probabilities_nb[, "1"] > optimal_cutoff_nb, 1, 0)
+# Skutočné triedy
+actual_classes <- factor(testing_data_nb$Diabetes, levels = c("0", "1"))
+predicted_classes <- factor(predicted_classes, levels = c("0", "1"))
+# Vytvorenie konfúznej matice
+conf_matrix <- caret::confusionMatrix(predicted_classes, actual_classes, positive = "1")
+print(conf_matrix)
+```
+Confusion Matrix and Statistics
+
+          Reference
+Prediction    0    1
+         0 2626  935
+         1 1346 3037
+                                          
+               Accuracy : 0.7129          
+                 95% CI : (0.7028, 0.7228)
+    No Information Rate : 0.5             
+    P-Value [Acc > NIR] : < 2.2e-16       
+                                          
+                  Kappa : 0.4257          
+                                          
+ Mcnemar's Test P-Value : < 2.2e-16       
+                                          
+            Sensitivity : 0.7646          
+            Specificity : 0.6611          
+         Pos Pred Value : 0.6929          
+         Neg Pred Value : 0.7374          
+             Prevalence : 0.5000          
+         Detection Rate : 0.3823          
+   Detection Prevalence : 0.5517          
+      Balanced Accuracy : 0.7129          
+                                          
+       'Positive' Class : 1        
+
+Výsledky sú porovnateľné, zmena na naive bayes, traintest split a zmena formule síce priniesla mierne zlepšenú accuracy, no to na druhej strane, zhoršila senzitivitu, čo je v kontexte nášho datasetu mierne nežiadúce, kedže chceme skôr zvyšit túto metriku.
+
+
+## LASSO regresný model model
+
+LASSO pripája k stratovej funkcii regulárny člen L1. Vykonáva výber premenných zmenšením koeficientov menej dôležitých prediktorov presne na nulu, čím ich účinne odstráni z modelu. LASSO je obzvlášť užitočný pri práci s vysokorozmernými súbormi údajov s mnohými prediktormi.
+
+```{r}
+set.seed(123) # for reproducibility
+train_index <- sample(1:nrow(data), 0.7 * nrow(data))
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+
+
+predictors  <- names(data)[names(data) != "BMI"]
+response <- "BMI"
+x_train <- as.matrix(train_data[, predictors])
+y_train <- train_data[, response]
+x_test <- as.matrix(test_data[, predictors])
+y_test <- test_data[, response]
+
+lasso_model <- glmnet(x_train, y_train, alpha = 1)
+plot(lasso_model, xvar = "lambda")
+
+lasso_pred <- predict(lasso_model, s = 0.2, newx = x_test)
+
+mse <- mean((lasso_pred - y_test)^2)
+rmse <- sqrt(mse)
+rsquared <- 1 - mse / var(y_test)
+
+# Summary table
+results <- data.frame(Method = "Lasso",
+                      Lambda = 0.2,
+                      MSE = mse,
+                      RMSE = rmse,
+                      R_squared = rsquared)
+results
+
+# Model Validation. Estimate the model on the testing data.
+lasso_test = glmnet(x_test, y_test, alpha = 1, lambda = 0.2)      # LASSO on test dataset
+lasso_test_coef = predict(lasso_test, type = "coefficients", s = 0.2) 
+lasso_test_coef
+
+```
+
+Ako vidime, Lasso vybral ine premenné ako prediktory : HighBP, HighChol, Cholcheck, Smoker... ako my pri lineárnej regresií.
+
+
+Parameter lambda v regresii LASSO riadi silu regularizácie. Výber optimálneho parametra lambda je rozhodujúci pre vyváženie kompromisu medzi skreslením a rozptylom v modeli. Príliš malá lambda môže viesť k nadmernému prispôsobeniu, zatiaľ čo príliš veľká lambda môže viesť k nedostatočnému prispôsobeniu.
+
+```{r}
+# Define predictors and response variable
+all_predictors <- names(data)[names(data) != "BMI"]
+response <- "BMI"
+
+# Split the data into train and test sets
+set.seed(123) # for reproducibility
+train_index <- createDataPartition(data$BMI, p = 0.7, list = FALSE)
+train_data <- data[train_index, ]
+test_data <- data[-train_index, ]
+
+x_train <- as.matrix(train_data[, all_predictors])
+y_train <- train_data[, response]
+x_test <- as.matrix(test_data[, all_predictors])
+y_test <- test_data[, response]
+
+num_folds <- 5  
+
+# Use k-fold cross-validation to select optimal lambda
+lasso_cv <- cv.glmnet(x_train, y_train, alpha = 1, nfolds = num_folds)
+
+
+```
+
+# lambda value that minimizes the error (MSE) 
+
+```{r}
+min_error_lambda <- lasso_cv$lambda.min
+min_error_lambda_index <- which(lasso_cv$lambda == min_error_lambda)
+min_error_lambda_coefficients <- coef(lasso_cv, s = min_error_lambda)
+```
+minimálna chyba lambda vedie k najnižšej chybe (napr. stredná kvadratická chyba, chyba krížového overovania) na validačnej množine alebo počas procesu výberu modelu.Počas procesu trénovania modelu sa zvyčajne testujú rôzne hodnoty lambda a výkonnosť modelu (napr. chyba) sa vyhodnocuje na samostatnej validačnej množine alebo prostredníctvom krížového overovania. Za optimálnu hodnotu lambda sa považuje hodnota lambda, ktorá prináša najnižšiu chybu na validačnej množine.
+
+
+```{r}
+# Select lambda one standard deviation away from the minimum error
+lambda_sd <- lasso_cv$lambda.1se
+lambda_sd_index <- which(lasso_cv$lambda == lambda_sd)
+lambda_sd_coefficients <- coef(lasso_cv, s = lambda_sd)
+
+```
+
+
+# Tento prístup zabezpečuje, že zvolená hodnota lambda nie je príliš optimistická a poskytuje       realistickejší odhad výkonnosti modelu na nepozorovaných údajoch.
+
+```{r}
+# Print minimum error Lambda and minimum error lambda coefficients
+cat("Minimum error Lambda:", min_error_lambda, "\n")
+cat("Minimum error lambda coefficients:\n")
+print(min_error_lambda_coefficients)
+
+```
+Minimálna chyba Lambda: Viac koeficientov je nenulových, čo znamená menej rozptýlené riešenie.
+Jedna štandardná odchýlka od Lambda: Niektoré koeficienty sú nulové, čo vedie k rozptýleniu riešenia.
+
+Minimálna chyba Lambda: 
+Model s väčším počtom prediktorov môže mať lepší predikčný výkon na trénovaných údajoch, ale môže byť náchylnejší na nadmerné prispôsobenie sa šumu.
+
+Jedna štandardná odchýlka Lambda: 
+Model s mänším počtom prediktorov  môže lepšie zovšeobecniť na nezistené údaje, ale môže obetovať určitú predikčnú presnosť v porovnaní s modelom s väčším počtom prediktorov.
+
+```{r}
+cat("Lambda one standard deviation away from minimum error:", lambda_sd, "\n")
+cat("Lambda one standard deviation away lambda coefficients:\n")
+print(lambda_sd_coefficients)
+```
+
+
+
+```{r}
+# Make predictions based on the testing data using minimum error lambda
+lasso_pred_min_error <- predict(lasso_cv, newx = x_test, s = min_error_lambda)
+
+# Make predictions based on the testing data using lambda one standard deviation away from minimum error
+lasso_pred_sd <- predict(lasso_cv, newx = x_test, s = lambda_sd)
+
+# Evaluate model performance for minimum error lambda
+mse_min_error <- mean((lasso_pred_min_error - y_test)^2)
+rmse_min_error <- sqrt(mse_min_error)
+rsquared_min_error <- 1 - mse_min_error / var(y_test)
+
+# Evaluate model performance for lambda one standard deviation away from minimum error
+mse_sd <- mean((lasso_pred_sd - y_test)^2)
+rmse_sd <- sqrt(mse_sd)
+rsquared_sd <- 1 - mse_sd / var(y_test)
+
+
+```
+
+
+```{r}
+# Summary table for k-fold cross-validation model
+results_kfold_sd <- data.frame(Method = "Lasso with k-fold CV 1 SD away from min err",
+                            Lambda = lambda_sd,
+                            MSE = mse_sd,
+                            RMSE = rmse,
+                            R_squared = rsquared_sd)
+
+results_min_error <- data.frame(Method = "Lasso with k-fold CV Optimal Lambda",
+                            Lambda = min_error_lambda,
+                            MSE = mse_min_error,
+                            RMSE = rmse_min_error,
+                            R_squared = rsquared_min_error)
+
+results_kfold_sd
+
+# Comparison table
+combined_results <- rbind(results, results_min_error,results_kfold_sd)
+
+# Display combined results
+print(combined_results)
+```
+
+
+
+Lasso s k-násobným CV Optimal Lambda má najnižšiu MSE a RMSE, čo znamená, že poskytuje najlepšiu celkovú zhodu s údajmi spomedzi troch metód.
+Hodnota R-squared pre Lasso s k-násobným CV Optimal Lambda je tiež najvyššia, čo naznačuje, že vysvetľuje väčšiu variabilitu cieľovej premennej v porovnaní s ostatnými dvoma metódami.
+Lasso s k-násobným CV 1 SD od min err má o niečo horšie výsledky ako optimálna lambda, ale stále lepšie ako pôvodné Lasso s lambda = 0,2.
+Celkovo sa zdá, že Lasso s k-násobným CV Optimal Lambda je na základe týchto hodnotiacich metrík najvýkonnejšou metódou spomedzi troch.
